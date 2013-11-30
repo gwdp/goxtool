@@ -120,7 +120,7 @@ class Strategy(strategy.Strategy):
              #stop stop loss bot
              self.already_executed = True
         elif key == "s":
-           dialog = Alert(STDSCR, self.gox, curses.color_pair(20), "AUTO STOP LOSS")
+           dialog = StopLossDialog(STDSCR, self.gox, curses.color_pair(20), "AUTO STOP LOSS")
            dialog.modal()
            prc, delta = dialog.do_submit(dialog.price, dialog.delta)
            if prc:
@@ -191,9 +191,9 @@ class Strategy(strategy.Strategy):
       self.btc_wallet = goxapi.int2float(self.gox.wallet[BTC], BTC)
       self.fiat_wallet = goxapi.int2float(self.gox.wallet[self.user_currency], self.user_currency)   
         
-class Alert(goxtool.DlgNewStopLoss):
+class StopLossDialog(goxtool.DlgStopLoss):
     def __init__(self, stdscr, gox, color, msg):
-        goxtool.DlgNewStopLoss.__init__(self, stdscr, gox, color, msg)
+        goxtool.DlgStopLoss.__init__(self, stdscr, gox, color, msg)
         self.price = 0
         self.delta = 0
      
