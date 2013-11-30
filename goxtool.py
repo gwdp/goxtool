@@ -1234,7 +1234,7 @@ class NumberBox(TextBox):
                 char = 0
         return TextBox.validator(self, char)
 
-class DlgNewStopLoss(Win):
+class DlgStopLoss(Win):
     """abtract base class for entering new stop loss informations"""
     def __init__(self, stdscr, gox, color, title):
         self.gox = gox
