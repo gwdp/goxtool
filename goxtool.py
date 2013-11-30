@@ -47,6 +47,7 @@ sys_out = sys.stdout #pylint: disable=C0103
 HEIGHT_STATUS   = 2
 HEIGHT_CON      = 7
 WIDTH_ORDERBOOK = 45
+STRATEGY_INFORMATION = ""
 
 COLORS =    [["con_text",       curses.COLOR_BLUE,    curses.COLOR_CYAN]
             ,["con_text_buy",   curses.COLOR_BLUE,    curses.COLOR_GREEN]
@@ -70,6 +71,7 @@ COLORS =    [["con_text",       curses.COLOR_BLUE,    curses.COLOR_CYAN]
             ,["dialog_sel_sel",  curses.COLOR_YELLOW, curses.COLOR_BLUE]
             ,["dialog_bid_text", curses.COLOR_GREEN,  curses.COLOR_BLACK]
             ,["dialog_ask_text", curses.COLOR_RED,    curses.COLOR_WHITE]
+            ,["dialog_stop_loss", curses.COLOR_WHITE,    curses.COLOR_BLUE]
             ]
 
 INI_DEFAULTS =  [["goxtool", "set_xterm_title", "True"]
@@ -979,9 +981,14 @@ class WinStatus(Win):
 
         line2 += "o_lag: %s | " % self.order_lag_txt
         line2 += "s_lag: %.3f s" % (self.gox.socket_lag / 1e6)
+        line1 += STRATEGY_INFORMATION
         self.addstr(0, 0, line1, COLOR_PAIR["status_text"])
         self.addstr(1, 0, line2, COLOR_PAIR["status_text"])
 
+
+    def addStrategyInformation(self,value):
+        global STRATEGY_INFORMATION
+        STRATEGY_INFORMATION = value
 
     def slot_changed(self, dummy_sender, dummy_data):
         """the callback funtion called by the Gox() instance"""
@@ -1225,7 +1232,84 @@ class NumberBox(TextBox):
                 char = 0
         return TextBox.validator(self, char)
 
+class DlgNewStopLoss(Win):
+    """abtract base class for entering new stop loss informations"""
+    def __init__(self, stdscr, gox, color, title):
+        self.gox = gox
+        self.color = color
+        self.title = title
+        self.edit_price = None
+        self.edit_delta = None
+        Win.__init__(self, stdscr)
 
+    def calc_size(self):
+        Win.calc_size(self)
+        self.width = 35
+        self.height = 8
+        self.posx = (self.termwidth - self.width) / 2
+        self.posy = (self.termheight - self.height) / 2
+
+    def paint(self):
+        self.win.bkgd(" ", self.color)
+        self.win.border()
+        self.addstr(0, 1, " %s " % self.title, self.color)
+        self.addstr(2, 2, " price", self.color)
+        self.addstr(2, 30, self.gox.curr_quote)
+        self.addstr(4, 2, " delta", self.color)
+        self.addstr(4, 30, self.gox.curr_quote)
+        self.addstr(6, 2, "F10 ", self.color + curses.A_REVERSE)
+        self.addstr("cancel ", self.color)
+        self.addstr("Enter ", self.color + curses.A_REVERSE)
+        self.addstr("submit ", self.color)
+        self.edit_price = NumberBox(self, 2, 10, 20)
+        self.edit_delta = NumberBox(self, 4, 10, 20)
+
+    def do_submit(self, price_float, delta_float):
+        """sumit the order. implementating class will do eiter buy or sell"""
+        raise NotImplementedError()
+
+    def modal(self):
+        """enter the modal getch() loop of this dialog"""
+        if self.win:
+            focus = 1
+            # next time I am going to use some higher level
+            # wrapper on top of curses, i promise...
+            while True:
+                if focus == 1:
+                    res = self.edit_price.modal()
+                    if res == -1:
+                        break # cancel entire dialog
+                    if res in [10, curses.KEY_DOWN, curses.KEY_UP]:
+                        try:
+                            price_float = float(self.edit_price.value)
+                            focus = 2
+                        except ValueError:
+                            pass # can't move down until this is a valid number
+
+                if focus == 2:
+                    res = self.edit_delta.modal()
+                    if res == -1:
+                        break # cancel entire dialog
+                    if res in [curses.KEY_UP, curses.KEY_DOWN]:
+                        focus = 1
+                    if res == 10:
+                        try:
+                            delta_float = float(self.edit_delta.value)
+                            break # have both values now, can submit order
+                        except ValueError:
+                            pass # no float number, stay in this edit field
+
+            if res == -1:
+                #user has hit f10. just end here, do nothing
+                pass
+            if res == 10:
+                self.do_submit(price_float, delta_float)
+
+        # make sure all cyclic references are garbage collected or
+        # otherwise the curses window won't disappear
+        self.edit_price = None
+        self.edit_delta = None
+        
 class DlgNewOrder(Win):
     """abtract base class for entering new orders"""
     def __init__(self, stdscr, gox, color, title):
@@ -1330,8 +1414,6 @@ class DlgNewOrderAsk(DlgNewOrder):
         volume = self.gox.base2int(volume)
         self.gox.sell(price, volume)
 
-
-
 #
 #
 # logging, printing, etc...
@@ -1395,10 +1477,11 @@ class PrintHook():
 class StrategyManager():
     """load the strategy module"""
 
-    def __init__(self, gox, strategy_name_list):
+    def __init__(self, gox, strategy_name_list, statuswin):
         self.strategy_object_list = []
         self.strategy_name_list = strategy_name_list
         self.gox = gox
+        self.statuswin = statuswin
         self.reload()
 
     def unload(self):
@@ -1416,7 +1499,7 @@ class StrategyManager():
                 strategy_module = __import__(name)
                 try:
                     reload(strategy_module)
-                    strategy_object = strategy_module.Strategy(self.gox)
+                    strategy_object = strategy_module.Strategy(self.gox,self.statuswin)
                     self.strategy_object_list.append(strategy_object)
                     if hasattr(strategy_object, "name"):
                         self.gox.strategies[strategy_object.name] = strategy_object
@@ -1513,7 +1596,7 @@ def main():
             statuswin = WinStatus(stdscr, gox)
             chartwin = WinChart(stdscr, gox)
 
-            strategy_manager = StrategyManager(gox, strat_mod_list)
+            strategy_manager = StrategyManager(gox, strat_mod_list, statuswin)
 
             gox.start()
             while True:

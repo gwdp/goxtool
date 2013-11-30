@@ -4,3 +4,5 @@
 *.swp
 .ropeproject
 _*
+
+run.sh
