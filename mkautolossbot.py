@@ -56,7 +56,6 @@ class Strategy(strategy.Strategy):
         global LAST_TRADE_PRICE_BUY
         global STOP_PRICE_DELTA
         global STOP_PRICE
-        global TRIGGERED_TRADE_PRICE_SELL
         
         if self.already_executed:
             Strategy.end_bot(self)
@@ -100,7 +99,7 @@ class Strategy(strategy.Strategy):
           else:
             self.log_trade()
             #update status bar
-            self.statuswin.addStrategyInformation(" | STOP LOSS: VALUE %.1f DELTA %.1f STATE: %s" % (STOP_PRICE,STOP_PRICE_DELTA,("ACTIVE" if (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE) else "INACTIVE")))
+            self.statuswin.addStrategyInformation(" | STOP LOSS: VALUE %.1f DELTA %.1f STATE %s" % (STOP_PRICE,STOP_PRICE_DELTA,("ACTIVE" if (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE) else "INACTIVE")))
 
     def slot_keypress(self, gox, key):
         global TRADE_TYPE
@@ -131,7 +130,7 @@ class Strategy(strategy.Strategy):
                  STOP_PRICE_DELTA = delta                
            #update info
            self.log("STOP LOSS Changed by user to %s %s with delta %s" % (STOP_PRICE,self.user_currency,STOP_PRICE_DELTA))
-           self.statuswin.addStrategyInformation(" | STOP LOSS: VALUE %.1f DELTA %.1f STATE: %s" % (STOP_PRICE,STOP_PRICE_DELTA,("ACTIVE" if (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE) else "INACTIVE")))
+           self.statuswin.addStrategyInformation(" | STOP LOSS: VALUE %.1f DELTA %.1f STATE %s" % (STOP_PRICE,STOP_PRICE_DELTA,("ACTIVE" if (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE) else "INACTIVE")))
 
     def end_bot(self):
           global TRIGGERED_TRADE_PRICE_SELL
@@ -140,7 +139,7 @@ class Strategy(strategy.Strategy):
           STOP_PRICE = 1
           STOP_PRICE_DELTA = 0
           #update status bar
-          self.statuswin.addStrategyInformation(" | STOP LOSS: VALUE %.1f DELTA %.1f STATE: %s at %.4f" % (STOP_PRICE,STOP_PRICE_DELTA,"TRIGGERED",TRIGGERED_TRADE_PRICE_SELL))
+          self.statuswin.addStrategyInformation(" | STOP LOSS: VALUE %.1f DELTA %.1f STATE %s at %.4f" % (STOP_PRICE,STOP_PRICE_DELTA,"TRIGGERED",TRIGGERED_TRADE_PRICE_SELL))
           self.log("STOP LOSS BOT DEACTIVATED!!!!!!")
           self.log_trade()
           return
@@ -149,6 +148,7 @@ class Strategy(strategy.Strategy):
       global LAST_TRADE_PRICE_SELL
       global LAST_TRADE_PRICE_BUY
       global TRADE_TYPE
+      global TRIGGERED_TRADE_PRICE_SELL
       global LAST_TRADE_INFO
       #reload prices
       self.fetchPrices()
