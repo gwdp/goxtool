@@ -174,7 +174,7 @@ class Win:
 
     def do_paint(self):
         """call this if you want the window to repaint itself"""
-        curses.curs_set(0)
+        #curses.curs_set(0) -- this comment seems to solve the issue with log no be visible at run
         if self.win:
             self.paint()
             self.done_paint()
@@ -1365,7 +1365,7 @@ class DlgNewOrder(Win):
                             focus = 2
                         except ValueError:
                             pass # can't move down until this is a valid number
-
+                            
                 if focus == 2:
                     res = self.edit_volume.modal()
                     if res == -1:

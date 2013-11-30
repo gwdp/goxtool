@@ -26,6 +26,7 @@ BTC = "BTC"
 LAST_TRADE_INFO = ""
 LAST_TRADE_PRICE_ASK = 0
 LAST_TRADE_PRICE_SELL = 0
+TRIGGERED_TRADE_PRICE_SELL = 0
 INITIAL_STOP_PRICE = 1
 STOP_PRICE_DELTA = 20
 STOP_PRICE = INITIAL_STOP_PRICE
@@ -55,6 +56,7 @@ class Strategy(strategy.Strategy):
         global LAST_TRADE_PRICE_BUY
         global STOP_PRICE_DELTA
         global STOP_PRICE
+        global TRIGGERED_TRADE_PRICE_SELL
         
         if self.already_executed:
             Strategy.end_bot(self)
@@ -132,10 +134,13 @@ class Strategy(strategy.Strategy):
            self.statuswin.addStrategyInformation(" | STOP LOSS: VALUE %.1f DELTA %.1f STATE: %s" % (STOP_PRICE,STOP_PRICE_DELTA,("ACTIVE" if (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE) else "INACTIVE")))
 
     def end_bot(self):
+          global TRIGGERED_TRADE_PRICE_SELL
+          global STOP_PRICE
+          global STOP_PRICE_DELTA
           STOP_PRICE = 1
           STOP_PRICE_DELTA = 0
           #update status bar
-          self.statuswin.addStrategyInformation(" | STOP LOSS: VALUE %.1f DELTA %.1f STATE: %s" % (STOP_PRICE,STOP_PRICE_DELTA,"TRIGGERED"))
+          self.statuswin.addStrategyInformation(" | STOP LOSS: VALUE %.1f DELTA %.1f STATE: %s at %.4f" % (STOP_PRICE,STOP_PRICE_DELTA,"TRIGGERED",TRIGGERED_TRADE_PRICE_SELL))
           self.log("STOP LOSS BOT DEACTIVATED!!!!!!")
           self.log_trade()
           return
@@ -160,6 +165,7 @@ class Strategy(strategy.Strategy):
         TRADE_TYPE = None
       elif TRADE_TYPE == MARKET_SELL:
         #
+        TRIGGERED_TRADE_PRICE_SELL = LAST_TRADE_PRICE_SELL
         LAST_TRADE_INFO = " MARKET SELL: VOL %s BTC -> %.4f %s -- at %.4f %s" % (self.btc_wallet, (self.btc_wallet * LAST_TRADE_PRICE_SELL),self.user_currency,LAST_TRADE_PRICE_SELL,self.user_currency)
         #
         self.gox.sell(0, int(self.btc_wallet * 1e8))
