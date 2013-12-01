@@ -48,7 +48,7 @@ HEIGHT_STATUS   = 2
 HEIGHT_CON      = 7
 WIDTH_ORDERBOOK = 45
 STRATEGY_INFORMATION = ""
-
+BTC = "BTC"
 COLORS =    [["con_text",       curses.COLOR_BLUE,    curses.COLOR_CYAN]
             ,["con_text_buy",   curses.COLOR_BLUE,    curses.COLOR_GREEN]
             ,["con_text_sell",  curses.COLOR_BLUE,    curses.COLOR_RED]
@@ -1399,9 +1399,13 @@ class DlgNewOrderBid(DlgNewOrder):
             "New buy order")
 
     def do_submit(self, price, volume):
+        global BTC
         price = self.gox.quote2int(price)
-        volume = self.gox.base2int(volume)
-        self.gox.buy(price, volume)
+        #Check if volume is not bigger than actual owned.. this can cause a confusion
+        actualOwnedBTC = goxapi.int2float(self.gox.wallet[BTC], BTC)
+        toBuy = self.gox.base2int((actualOwnedBTC if actualOwnedBTC < volume else volume))
+        #order buy
+        self.gox.buy(price, toBuy)
 
 
 class DlgNewOrderAsk(DlgNewOrder):
@@ -1413,8 +1417,11 @@ class DlgNewOrderAsk(DlgNewOrder):
 
     def do_submit(self, price, volume):
         price = self.gox.quote2int(price)
-        volume = self.gox.base2int(volume)
-        self.gox.sell(price, volume)
+        #Check if volume is not bigger than actual owned.. this can cause a confusion
+        actualOwnedBTC = goxapi.int2float(self.gox.wallet[BTC], BTC)
+        toSell = self.gox.base2int((actualOwnedBTC if actualOwnedBTC < volume else volume))
+        #order sell
+        self.gox.sell(price, toSell)
 
 #
 #
