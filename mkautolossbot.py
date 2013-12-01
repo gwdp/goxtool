@@ -193,7 +193,7 @@ class Strategy(strategy.Strategy):
         TRADE_TYPE = None
       elif TRADE_TYPE == TRADE_TYPE_FIRST_SELL_ORDER:
         #Write Info
-        tradeValue = LAST_TRADE_PRICE_SELL-INSERT_ORDER_DIFFERENCE
+        tradeValue = LAST_TRADE_PRICE_BUY-INSERT_ORDER_DIFFERENCE
         LAST_TRADE_INFO = " SELL ORDER: VOL %.8f BTC -> %.8f %s -- at %.8f %s" % \
         (self.btc_wallet, (self.btc_wallet * tradeValue),self.user_currency,tradeValue,self.user_currency)
         #Order
@@ -201,7 +201,7 @@ class Strategy(strategy.Strategy):
         TRADE_TYPE = None
       elif TRADE_TYPE == TRADE_TYPE_FIRST_BUY_ORDER:
         #Write Info
-        tradeValue = LAST_TRADE_PRICE_BUY+INSERT_ORDER_DIFFERENCE
+        tradeValue = LAST_TRADE_PRICE_SELL+INSERT_ORDER_DIFFERENCE
         LAST_TRADE_INFO = " MARKET BUY: VOL %.8f %s -> %.8f BTC -- at %.8f %s" % \
         (self.fiat_wallet, self.user_currency, (self.fiat_wallet / tradeValue),tradeValue,self.user_currency)
         #Order
