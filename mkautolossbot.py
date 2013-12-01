@@ -42,6 +42,7 @@ class Strategy(strategy.Strategy):
         strategy.Strategy.__init__(self, gox)
         gox.history.signal_changed.connect(self.slot_changed)
         self.statuswin = statuswin
+        self.statuswin.addStrategyInformation("") #reset in initialization
         self.init = False
         self.got_wallet = False
         self.already_executed = False
@@ -86,7 +87,7 @@ class Strategy(strategy.Strategy):
              STOP_PRICE_DELTA:
                STOP_PRICE+=STOP_PRICE_DELTA
                self.log("Increasing STOP LOSS to %.8f" % (STOP_PRICE))
-               self.log("Need to be %.8f %s to NEXT STOP LOSS" % (STOP_PRICE+(STOP_PRICE_DELTA*2),self.user_currency))
+               self.log("Need to be %.8f %s to NEXT STOP LOSS %8.f %s" % (STOP_PRICE+(STOP_PRICE_DELTA*2),self.user_currency,STOP_PRICE+STOP_PRICE_DELTA,self.user_currency))
           elif (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE):
                self.log("STOP LOSS %.8f" % (STOP_PRICE))
             
@@ -207,7 +208,7 @@ class Strategy(strategy.Strategy):
       BOT_STATE = (("TRIGERRED at %.4f" % (TRIGGERED_TRADE_PRICE_SELL)) if isTriggered \
                   else ("ACTIVE" if (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE) \
                   else "INACTIVE"))
-      self.statuswin.addStrategyInformation(" | STOP LOSS: VALUE %.4f DELTA %.4f STATE %s" % (STOP_PRICE,STOP_PRICE_DELTA,BOT_STATE))
+      self.statuswin.addStrategyInformation(" | Stop Loss (%s): VALUE %.4f DELTA %.4f" % (BOT_STATE,STOP_PRICE,STOP_PRICE_DELTA))
         
 class StopLossDialog(goxtool.DlgStopLoss):
     def __init__(self, stdscr, gox, color, msg):
