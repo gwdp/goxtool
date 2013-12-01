@@ -172,6 +172,8 @@ class Strategy(strategy.Strategy):
       global LAST_TRADE_INFO
       #reload prices
       self.fetchPrices()
+      #reload wallet before transaction
+      self.fecthWallet()
       ###
       if not self.init:
           self.debug("Bot not initialized!")
