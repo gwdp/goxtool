@@ -1405,7 +1405,7 @@ class DlgNewOrderBid(DlgNewOrder):
         actualOwnedBTC = goxapi.int2float(self.gox.wallet[BTC], BTC)
         toBuy = self.gox.base2int((actualOwnedBTC if actualOwnedBTC < volume else volume))
         #order buy
-        self.gox.buy(price, toBuy)
+        self.gox.buy(price, toBuy * 1e8)
 
 
 class DlgNewOrderAsk(DlgNewOrder):
@@ -1421,7 +1421,7 @@ class DlgNewOrderAsk(DlgNewOrder):
         actualOwnedBTC = goxapi.int2float(self.gox.wallet[BTC], BTC)
         toSell = self.gox.base2int((actualOwnedBTC if actualOwnedBTC < volume else volume))
         #order sell
-        self.gox.sell(price, toSell)
+        self.gox.sell(price, toSell * 1e8)
 
 #
 #
