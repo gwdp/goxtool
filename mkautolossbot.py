@@ -177,6 +177,7 @@ class Strategy(strategy.Strategy):
         TRADE_TYPE = None
         
     def fecthWallet(self):
+      global BTC
       self.btc_wallet = goxapi.int2float(self.gox.wallet[BTC], BTC)
       self.fiat_wallet = goxapi.int2float(self.gox.wallet[self.user_currency], self.user_currency)   
       self.log("Wallet data refreshed. | %.8f BTC | %.8f %s |" % (self.btc_wallet,self.fiat_wallet,self.user_currency))
