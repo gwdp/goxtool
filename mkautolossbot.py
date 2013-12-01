@@ -197,7 +197,7 @@ class Strategy(strategy.Strategy):
         LAST_TRADE_INFO = " SELL ORDER: VOL %.8f BTC -> %.8f %s -- at %.8f %s" % \
         (self.btc_wallet, (self.btc_wallet * tradeValue),self.user_currency,tradeValue,self.user_currency)
         #Order
-        self.gox.sell(tradeValue, self.gox.base2int(self.btc_wallet * 1e8))
+        self.gox.sell(self.gox.quote2int(tradeValue), self.gox.base2int(self.btc_wallet * 1e8))
         TRADE_TYPE = None
       elif TRADE_TYPE == TRADE_TYPE_FIRST_BUY_ORDER:
         #Write Info
@@ -205,7 +205,7 @@ class Strategy(strategy.Strategy):
         LAST_TRADE_INFO = " MARKET BUY: VOL %.8f %s -> %.8f BTC -- at %.8f %s" % \
         (self.fiat_wallet, self.user_currency, (self.fiat_wallet / tradeValue),tradeValue,self.user_currency)
         #Order
-        self.gox.buy(tradeValue, self.gox.base2int((self.fiat_wallet / tradeValue) * 1e8))
+        self.gox.buy(self.gox.quote2int(tradeValue), self.gox.base2int((self.fiat_wallet / tradeValue) * 1e8))
         TRADE_TYPE = None
         
     def slot_keypress(self, gox, key):
