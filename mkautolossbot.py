@@ -75,11 +75,8 @@ class Strategy(strategy.Strategy):
           #reload wallet -- need to reload before stop loss logic to know funds !
           self.fecthWallet()
           
-          #check if have btc in wallet -- means bot is active
-          if self.btc_wallet > MINIMUM_BTC_WALLET_PRICE:
-            self.log("STOP LOSS %.8f" % (STOP_PRICE))
-          else:
-            # reset bot in case user add bitcoin in wallet and the bot activate and sell for mistake
+          # reset bot in case user add bitcoin in wallet and the bot activate and sell for mistake
+          if self.btc_wallet <= MINIMUM_BTC_WALLET_PRICE:
             STOP_PRICE = 1
             STOP_PRICE_DELTA = 0
             
@@ -89,10 +86,9 @@ class Strategy(strategy.Strategy):
              STOP_PRICE_DELTA:
                STOP_PRICE+=STOP_PRICE_DELTA
                self.log("Increasing STOP LOSS to %.8f" % (STOP_PRICE))
-          #log next stop loss  
-          if self.btc_wallet > MINIMUM_BTC_WALLET_PRICE and \
-             STOP_PRICE_DELTA:
                self.log("Need to be %.8f %s to NEXT STOP LOSS" % (STOP_PRICE+(STOP_PRICE_DELTA*2),self.user_currency))
+          elif (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE):
+               self.log("STOP LOSS %.8f" % (STOP_PRICE))
             
           # check stop loss decrease&sell
           if (LAST_TRADE_PRICE_SELL < STOP_PRICE) and (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE):
