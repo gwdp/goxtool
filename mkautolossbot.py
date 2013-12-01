@@ -26,6 +26,7 @@ STOP_PRICE_DELTA = 0
 TRADE_TYPE = None
 MARKET_BUY = "Market Buy"
 MARKET_SELL = "Market Sell"
+BTC = "BTC"
 LAST_TRADE_INFO = ""
 LAST_TRADE_PRICE_ASK = 0
 LAST_TRADE_PRICE_SELL = 0
@@ -64,14 +65,9 @@ class Strategy(strategy.Strategy):
             return
         
         if not self.init:
-          try:
             #reload wallet
             self.fecthWallet()
-          except:
-            self.log("Could not retrieve wallet data, retrying...")
-            return
-          else:
-            self.log("Wallet data retrieved...")
+            #mark as initialized
             self.init = True 
             #reload prices
             self.fetchPrices()
