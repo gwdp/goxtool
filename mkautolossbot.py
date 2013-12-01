@@ -18,20 +18,22 @@ import goxapi
 import goxtool
 STDSCR = curses.initscr()
 
-# Do not mess with these
+
+# User defined variables
+INITIAL_STOP_PRICE = 1
+STOP_PRICE_DELTA = 0
+# For Internal Bot usage - don't mess with these
 TRADE_TYPE = None
 MARKET_BUY = "Market Buy"
 MARKET_SELL = "Market Sell"
-BTC = "BTC"
 LAST_TRADE_INFO = ""
 LAST_TRADE_PRICE_ASK = 0
 LAST_TRADE_PRICE_SELL = 0
 TRIGGERED_TRADE_PRICE_SELL = 0
-INITIAL_STOP_PRICE = 1
-STOP_PRICE_DELTA = 0
 STOP_PRICE = INITIAL_STOP_PRICE
 MINIMUM_BTC_WALLET_PRICE = 0.0001
-MKAUTOLOSSBOT_VERSION = "0.0.1"
+MKAUTOLOSSBOT_VERSION = "0.0.2"
+
 
 class Strategy(strategy.Strategy):
     """stop loss/start gain bot"""
@@ -86,11 +88,14 @@ class Strategy(strategy.Strategy):
             STOP_PRICE_DELTA = 0
             
           # check stop loss increase
-          if (LAST_TRADE_PRICE_BUY > STOP_PRICE+(STOP_PRICE_DELTA*2) and (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE)):
+          if (LAST_TRADE_PRICE_BUY > STOP_PRICE+(STOP_PRICE_DELTA*2) and \
+             (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE)) and \
+             STOP_PRICE_DELTA:
             STOP_PRICE+=STOP_PRICE_DELTA
             self.log("Increasing STOP LOSS to %.1f" % (STOP_PRICE))
           #log next stop loss  
-          if self.btc_wallet > MINIMUM_BTC_WALLET_PRICE:
+          if self.btc_wallet > MINIMUM_BTC_WALLET_PRICE and \
+             STOP_PRICE_DELTA:
             self.log("Need to be %.1f %s to NEXT STOP LOSS" % (STOP_PRICE+(STOP_PRICE_DELTA*2),self.user_currency))
             
           # check stop loss decrease&sell
