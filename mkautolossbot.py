@@ -137,7 +137,6 @@ class Strategy(strategy.Strategy):
       LAST_TRADE_PRICE_BUY = float(self.gox.orderbook.ask/float(100000))
       # log
       self.log("Got last price SELL: %.8f %s BUY: %.8f %s" % (LAST_TRADE_PRICE_SELL,self.user_currency,LAST_TRADE_PRICE_BUY,self.user_currency))
-      
     #display info methods
     def log_trade(self):
       global LAST_TRADE_INFO
@@ -149,6 +148,7 @@ class Strategy(strategy.Strategy):
         self.debug(15 * " " + msg)
         self.debug("                                                                                 ")
         self.debug("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@")
+        
     def writeStatusInStatusBar(self,isTriggered):
       global MINIMUM_BTC_WALLET_PRICE
       global STOP_PRICE
@@ -158,7 +158,6 @@ class Strategy(strategy.Strategy):
                   else ("ACTIVE" if (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE) \
                   else "INACTIVE"))
       self.statuswin.addStrategyInformation(" | Stop Loss (%s): VALUE %.4f DELTA %.4f" % (BOT_STATE,STOP_PRICE,STOP_PRICE_DELTA))
-      
       ### actions
       def execute_trade(self):
         global LAST_TRADE_PRICE_SELL
