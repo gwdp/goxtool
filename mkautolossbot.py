@@ -181,7 +181,7 @@ class Strategy(strategy.Strategy):
         LAST_TRADE_INFO = " MARKET BUY: VOL %.8f %s -> %.8f BTC -- at %.8f %s" % \
         (self.fiat_wallet, self.user_currency, (self.fiat_wallet / LAST_TRADE_PRICE_BUY),LAST_TRADE_PRICE_BUY,self.user_currency)
         #Order
-        self.gox.buy(0, self.gox.base2int((self.fiat_wallet / LAST_TRADE_PRICE_BUY) * 1e8))
+        self.gox.buy(0, self.gox.base2int((self.fiat_wallet / LAST_TRADE_PRICE_BUY)))
         TRADE_TYPE = None
       elif TRADE_TYPE == TRADE_TYPE_MARKET_SELL:
         #Write Info
@@ -189,7 +189,7 @@ class Strategy(strategy.Strategy):
         LAST_TRADE_INFO = " MARKET SELL: VOL %.8f BTC -> %.8f %s -- at %.8f %s" % \
         (self.btc_wallet, (self.btc_wallet * LAST_TRADE_PRICE_SELL),self.user_currency,LAST_TRADE_PRICE_SELL,self.user_currency)
         #Order
-        self.gox.sell(0, self.gox.base2int(self.btc_wallet * 1e8))
+        self.gox.sell(0, self.gox.base2int(self.btc_wallet))
         TRADE_TYPE = None
       elif TRADE_TYPE == TRADE_TYPE_FIRST_SELL_ORDER:
         #Write Info
@@ -197,7 +197,7 @@ class Strategy(strategy.Strategy):
         LAST_TRADE_INFO = " SELL ORDER: VOL %.8f BTC -> %.8f %s -- at %.8f %s" % \
         (self.btc_wallet, (self.btc_wallet * tradeValue),self.user_currency,tradeValue,self.user_currency)
         #Order
-        self.gox.sell(self.gox.quote2int(tradeValue), self.gox.base2int(self.btc_wallet * 1e8))
+        self.gox.sell(self.gox.quote2int(tradeValue), self.gox.base2int(self.btc_wallet))
         TRADE_TYPE = None
       elif TRADE_TYPE == TRADE_TYPE_FIRST_BUY_ORDER:
         #Write Info
@@ -205,7 +205,7 @@ class Strategy(strategy.Strategy):
         LAST_TRADE_INFO = " MARKET BUY: VOL %.8f %s -> %.8f BTC -- at %.8f %s" % \
         (self.fiat_wallet, self.user_currency, (self.fiat_wallet / tradeValue),tradeValue,self.user_currency)
         #Order
-        self.gox.buy(self.gox.quote2int(tradeValue), self.gox.base2int((self.fiat_wallet / tradeValue) * 1e8))
+        self.gox.buy(self.gox.quote2int(tradeValue), self.gox.base2int((self.fiat_wallet / tradeValue)))
         TRADE_TYPE = None
         
     def slot_keypress(self, gox, key):
