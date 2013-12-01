@@ -87,12 +87,12 @@ class Strategy(strategy.Strategy):
           if (LAST_TRADE_PRICE_BUY > STOP_PRICE+(STOP_PRICE_DELTA*2) and \
              (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE)) and \
              STOP_PRICE_DELTA:
-            STOP_PRICE+=STOP_PRICE_DELTA
-            self.log("Increasing STOP LOSS to %.8f" % (STOP_PRICE))
+               STOP_PRICE+=STOP_PRICE_DELTA
+               self.log("Increasing STOP LOSS to %.8f" % (STOP_PRICE))
           #log next stop loss  
           if self.btc_wallet > MINIMUM_BTC_WALLET_PRICE and \
              STOP_PRICE_DELTA:
-            self.log("Need to be %.8f %s to NEXT STOP LOSS" % (STOP_PRICE+(STOP_PRICE_DELTA*2),self.user_currency))
+               self.log("Need to be %.8f %s to NEXT STOP LOSS" % (STOP_PRICE+(STOP_PRICE_DELTA*2),self.user_currency))
             
           # check stop loss decrease&sell
           if (LAST_TRADE_PRICE_SELL < STOP_PRICE) and (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE):
