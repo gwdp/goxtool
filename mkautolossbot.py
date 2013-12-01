@@ -28,7 +28,7 @@ LAST_TRADE_PRICE_ASK = 0
 LAST_TRADE_PRICE_SELL = 0
 TRIGGERED_TRADE_PRICE_SELL = 0
 INITIAL_STOP_PRICE = 1
-STOP_PRICE_DELTA = 20
+STOP_PRICE_DELTA = 0
 STOP_PRICE = INITIAL_STOP_PRICE
 MINIMUM_BTC_WALLET_PRICE = 0.0001
 MKAUTOLOSSBOT_VERSION = "0.0.1"
@@ -77,16 +77,21 @@ class Strategy(strategy.Strategy):
           #reload wallet -- need to reload before stop loss logic to know funds !
           self.fecthWallet()
           
-          # log previous trade
+          #check if have btc in wallet -- means bot is active
           if self.btc_wallet > MINIMUM_BTC_WALLET_PRICE:
             self.log("STOP LOSS %.1f" % (STOP_PRICE))
+          else:
+            # reset bot in case user add bitcoin in wallet and the bot activate and sell for mistake
+            STOP_PRICE = 1
+            STOP_PRICE_DELTA = 0
+            
           # check stop loss increase
           if (LAST_TRADE_PRICE_BUY > STOP_PRICE+(STOP_PRICE_DELTA*2) and (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE)):
             STOP_PRICE+=STOP_PRICE_DELTA
             self.log("Increasing STOP LOSS to %.1f" % (STOP_PRICE))
           #log next stop loss  
           if self.btc_wallet > MINIMUM_BTC_WALLET_PRICE:
-            self.log("Need to be %.1f USD to NEXT STOP LOSS" % (STOP_PRICE+(STOP_PRICE_DELTA*2)))
+            self.log("Need to be %.1f %s to NEXT STOP LOSS" % (STOP_PRICE+(STOP_PRICE_DELTA*2),self.user_currency))
             
           # check stop loss decrease&sell
           if (LAST_TRADE_PRICE_SELL < STOP_PRICE) and (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE):
