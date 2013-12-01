@@ -1415,9 +1415,10 @@ class DlgNewOrderAsk(DlgNewOrder):
         price = self.gox.quote2int(price)
         #Check if volume is not bigger than actual owned.. this can cause a confusion
         actualOwnedBTC = goxapi.int2float(self.gox.wallet[BTC], BTC)
-        toSell = (actualOwnedBTC if actualOwnedBTC < volume else volume)
+        volume = (actualOwnedBTC if actualOwnedBTC < volume else volume)
+        volume = self.gox.base2int(volume)
         #order sell
-        self.gox.sell(price, self.gox.base2int(toSell))
+        self.gox.sell(price, volume)
 
 #
 #
