@@ -81,7 +81,7 @@ class Strategy(strategy.Strategy):
           
           #check if have btc in wallet -- means bot is active
           if self.btc_wallet > MINIMUM_BTC_WALLET_PRICE:
-            self.log("STOP LOSS %.1f" % (STOP_PRICE))
+            self.log("STOP LOSS %.8f" % (STOP_PRICE))
           else:
             # reset bot in case user add bitcoin in wallet and the bot activate and sell for mistake
             STOP_PRICE = 1
@@ -92,11 +92,11 @@ class Strategy(strategy.Strategy):
              (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE)) and \
              STOP_PRICE_DELTA:
             STOP_PRICE+=STOP_PRICE_DELTA
-            self.log("Increasing STOP LOSS to %.1f" % (STOP_PRICE))
+            self.log("Increasing STOP LOSS to %.8f" % (STOP_PRICE))
           #log next stop loss  
           if self.btc_wallet > MINIMUM_BTC_WALLET_PRICE and \
              STOP_PRICE_DELTA:
-            self.log("Need to be %.1f %s to NEXT STOP LOSS" % (STOP_PRICE+(STOP_PRICE_DELTA*2),self.user_currency))
+            self.log("Need to be %.8f %s to NEXT STOP LOSS" % (STOP_PRICE+(STOP_PRICE_DELTA*2),self.user_currency))
             
           # check stop loss decrease&sell
           if (LAST_TRADE_PRICE_SELL < STOP_PRICE) and (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE):
@@ -139,7 +139,7 @@ class Strategy(strategy.Strategy):
            if delta:
                  STOP_PRICE_DELTA = delta                
            #update info
-           self.log("STOP LOSS Changed by user to %s %s with delta %s" % (STOP_PRICE,self.user_currency,STOP_PRICE_DELTA))
+           self.log("STOP LOSS Changed by user to %.8f %s with delta %.8f" % (STOP_PRICE,self.user_currency,STOP_PRICE_DELTA))
            self.writeStatusInStatusBar(False)
 
     def end_bot(self):
@@ -169,22 +169,22 @@ class Strategy(strategy.Strategy):
           
       if TRADE_TYPE == MARKET_BUY:
         #
-        LAST_TRADE_INFO = " MARKET BUY: VOL %.4f %s -> %f BTC -- at %.4f %s" % (self.fiat_wallet, self.user_currency, (self.fiat_wallet / LAST_TRADE_PRICE_BUY),LAST_TRADE_PRICE_BUY,self.user_currency)
+        LAST_TRADE_INFO = " MARKET BUY: VOL %.8f %s -> %.8f BTC -- at %.8f %s" % (self.fiat_wallet, self.user_currency, (self.fiat_wallet / LAST_TRADE_PRICE_BUY),LAST_TRADE_PRICE_BUY,self.user_currency)
         #
         self.gox.buy(0, int((self.fiat_wallet / LAST_TRADE_PRICE_BUY) * 1e8))
         TRADE_TYPE = None
       elif TRADE_TYPE == MARKET_SELL:
         #
         TRIGGERED_TRADE_PRICE_SELL = LAST_TRADE_PRICE_SELL
-        LAST_TRADE_INFO = " MARKET SELL: VOL %s BTC -> %.4f %s -- at %.4f %s" % (self.btc_wallet, (self.btc_wallet * LAST_TRADE_PRICE_SELL),self.user_currency,LAST_TRADE_PRICE_SELL,self.user_currency)
+        LAST_TRADE_INFO = " MARKET SELL: VOL %.8f BTC -> %.8f %s -- at %.8f %s" % (self.btc_wallet, (self.btc_wallet * LAST_TRADE_PRICE_SELL),self.user_currency,LAST_TRADE_PRICE_SELL,self.user_currency)
         #
         self.gox.sell(0, int(self.btc_wallet * 1e8))
         TRADE_TYPE = None
         
     def fecthWallet(self):
-      self.log("Wallet data refreshed. %s BTC %s %s" % (self.btc_wallet,self.fiat_wallet,self.user_currency))
       self.btc_wallet = goxapi.int2float(self.gox.wallet[BTC], BTC)
       self.fiat_wallet = goxapi.int2float(self.gox.wallet[self.user_currency], self.user_currency)   
+      self.log("Wallet data refreshed. | %.8f BTC | %.8f %s |" % (self.btc_wallet,self.fiat_wallet,self.user_currency))
       
     def fetchPrices(self):
       global LAST_TRADE_PRICE_BUY
@@ -193,7 +193,7 @@ class Strategy(strategy.Strategy):
       LAST_TRADE_PRICE_SELL = float(self.gox.orderbook.bid/float(100000))
       LAST_TRADE_PRICE_BUY = float(self.gox.orderbook.ask/float(100000))
       # log
-      self.log("Got last price SELL: %.4f %s BUY: %.4f %s" % (LAST_TRADE_PRICE_SELL,self.user_currency,LAST_TRADE_PRICE_BUY,self.user_currency))
+      self.log("Got last price SELL: %.8f %s BUY: %.8f %s" % (LAST_TRADE_PRICE_SELL,self.user_currency,LAST_TRADE_PRICE_BUY,self.user_currency))
     #display info methods
     def log_trade(self):
       global LAST_TRADE_INFO
@@ -211,7 +211,11 @@ class Strategy(strategy.Strategy):
       global MINIMUM_BTC_WALLET_PRICE
       global STOP_PRICE
       global STOP_PRICE_DELTA
-      self.statuswin.addStrategyInformation(" | STOP LOSS: VALUE %.1f DELTA %.1f STATE %s" % (STOP_PRICE,STOP_PRICE_DELTA,("TRIGERRED" if isTriggered else ("ACTIVE" if (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE) else "INACTIVE"))))
+      global TRIGGERED_TRADE_PRICE_SELL
+      BOT_STATE = (("TRIGERRED at %.4f" % (TRIGGERED_TRADE_PRICE_SELL)) if isTriggered \
+                  else ("ACTIVE" if (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE) \
+                  else "INACTIVE"))
+      self.statuswin.addStrategyInformation(" | STOP LOSS: VALUE %.4f DELTA %.4f STATE %s" % (STOP_PRICE,STOP_PRICE_DELTA,BOT_STATE))
         
 class StopLossDialog(goxtool.DlgStopLoss):
     def __init__(self, stdscr, gox, color, msg):
