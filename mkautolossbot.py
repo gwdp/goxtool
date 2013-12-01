@@ -87,7 +87,7 @@ class Strategy(strategy.Strategy):
              STOP_PRICE_DELTA:
                STOP_PRICE+=STOP_PRICE_DELTA
                self.log("Increasing STOP LOSS to %.8f" % (STOP_PRICE))
-               self.log("Need to be %.8f %s to NEXT STOP LOSS %8.f %s" % (STOP_PRICE+(STOP_PRICE_DELTA*2),self.user_currency,STOP_PRICE+STOP_PRICE_DELTA,self.user_currency))
+               self.log("Need to be %.8f %s to NEXT STOP LOSS %8.f %s" % (STOP_PRICE+(STOP_PRICE_DELTA*2),self.user_currency,(STOP_PRICE+STOP_PRICE_DELTA),self.user_currency))
           elif (self.btc_wallet > MINIMUM_BTC_WALLET_PRICE):
                self.log("STOP LOSS %.8f" % (STOP_PRICE))
             
