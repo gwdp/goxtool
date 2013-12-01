@@ -75,6 +75,8 @@ class Strategy(strategy.Strategy):
         else:
           #reload wallet -- need to reload before stop loss logic to know funds !
           self.fecthWallet()
+          #reload prices -- need to reload before stop loss logic to price !
+          self.fetchPrices()
           
           # reset bot in case user add bitcoin in wallet and the bot activate and sell for mistake
           if self.btc_wallet <= MINIMUM_BTC_WALLET_PRICE:
