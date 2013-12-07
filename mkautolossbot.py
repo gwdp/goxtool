@@ -249,7 +249,11 @@ class Strategy(strategy.Strategy):
            if prc:
                  STOP_PRICE = prc
            if delta:
-                 STOP_PRICE_DELTA = delta                
+                 STOP_PRICE_DELTA = delta
+           #reset bot in case of sell!
+           TRIGGERED_TRADE_PRICE_SELL = 0
+           TRADE_TYPE = None
+           self.already_executed = False
            #update info
            self.log("STOP LOSS Changed by user to %.8f %s with delta %.8f" % (STOP_PRICE,self.user_currency,STOP_PRICE_DELTA))
            self.writeStatusInStatusBar(False)
