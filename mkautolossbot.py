@@ -204,7 +204,7 @@ class Strategy(strategy.Strategy):
       elif TRADE_TYPE == TRADE_TYPE_FIRST_BUY_ORDER:
         #Write Info
         tradeValue = LAST_TRADE_PRICE_SELL+INSERT_ORDER_DIFFERENCE
-        LAST_TRADE_INFO = " MARKET BUY: VOL %.8f %s -> %.8f BTC -- at %.8f %s" % \
+        LAST_TRADE_INFO = " BUY ORDER: VOL %.8f %s -> %.8f BTC -- at %.8f %s" % \
         (self.fiat_wallet, self.user_currency, (self.fiat_wallet / tradeValue),tradeValue,self.user_currency)
         #Order
         self.gox.buy(self.gox.quote2int(tradeValue), self.gox.base2int((self.fiat_wallet / tradeValue)))
