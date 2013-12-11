@@ -961,7 +961,9 @@ class WinStatus(Win):
             line1 = line1.strip(" +")
         else:
             line1 += "No info (yet)"
-
+        #    
+        line1 += " | Fee: " + ("%f" % self.gox.trade_fee)
+        line1 += STRATEGY_INFORMATION
         #
         # second line
         #
@@ -981,7 +983,6 @@ class WinStatus(Win):
 
         line2 += "o_lag: %s | " % self.order_lag_txt
         line2 += "s_lag: %.3f s" % (self.gox.socket_lag / 1e6)
-        line1 += STRATEGY_INFORMATION
         self.addstr(0, 0, line1, COLOR_PAIR["status_text"])
         self.addstr(1, 0, line2, COLOR_PAIR["status_text"])
 
