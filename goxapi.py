@@ -29,6 +29,7 @@ if PY_VERSION < (2, 7):
 
 from ConfigParser import SafeConfigParser
 import base64
+import bisect
 import binascii
 import contextlib
 from Crypto.Cipher import AES
@@ -40,6 +41,7 @@ import inspect
 import io
 import json
 import logging
+import pubnub_light
 import Queue
 import time
 import traceback
@@ -49,7 +51,6 @@ from urllib2 import urlopen, HTTPError
 from urllib import urlencode
 import weakref
 import websocket
-import Pubnub
 
 input = raw_input  # pylint: disable=W0622,C0103
 
@@ -67,6 +68,9 @@ HTTP_HOST = "data.mtgox.com"
 
 USER_AGENT = "goxtool.py"
 
+# available channels as per https://mtgox.com/api/2/stream/list_public?pretty
+# queried on 2013-12-14 - this must be updated when they add new currencies,
+# I'm too lazy now to do that dynamically, it doesn't change often (if ever)
 CHANNELS = {
         "ticker.LTCGBP": "0102a446-e4d4-4082-8e83-cc02822f9172",
         "ticker.LTCCNY": "0290378c-e3d7-4836-8cb1-2bfae20cc492",
@@ -239,6 +243,7 @@ class GoxConfig(SafeConfigParser):
                 ,["gox", "history_timeframe", "15"]
                 ,["gox", "secret_key", ""]
                 ,["gox", "secret_secret", ""]
+                ,["pubnub", "stream_sorter_time_window", "0.5"]
                 ]
 
     def __init__(self, filename):
@@ -752,7 +757,7 @@ class BaseClient(BaseObject):
         self._terminating = True
         self._timer.cancel()
         if self.socket:
-            self.debug("""closing socket""")
+            self.debug("### closing socket")
             self.socket.sock.close()
 
     def force_reconnect(self):
@@ -807,7 +812,7 @@ class BaseClient(BaseObject):
             """request the full market depth, initialize the order book
             and then terminate. This is called in a separate thread after
             the streaming API has been connected."""
-            self.debug("requesting initial full depth")
+            self.debug("### requesting initial full depth")
             use_ssl = self.config.get_bool("gox", "use_ssl")
             proto = {True: "https", False: "http"}[use_ssl]
             fulldepth = http_request("%s://%s/api/2/%s%s/money/depth/full" % (
@@ -838,7 +843,7 @@ class BaseClient(BaseObject):
             else:
                 querystring = ""
 
-            self.debug("requesting history")
+            self.debug("### requesting history")
             use_ssl = self.config.get_bool("gox", "use_ssl")
             proto = {True: "https", False: "http"}[use_ssl]
             json_hist = http_request("%s://%s/api/2/%s%s/money/trades%s" % (
@@ -944,17 +949,23 @@ class BaseClient(BaseObject):
                     }
                 else:
                     if "error" in answer:
-                        # these are errors like "Order amount is too low"
-                        # or "Order not found" and the like, we send them
-                        # to signal_recv() as if they had come from the
-                        # streaming API beause Gox() can handle these errors.
-                        translated = {
-                            "op": "remark",
-                            "success": False,
-                            "message": answer["error"],
-                            "token": answer["token"],
-                            "id": reqid
-                        }
+                        if answer["token"] == "unknown_error":
+                            # enqueue it again, it will eventually succeed.
+                            self.enqueue_http_request(api_endpoint, params, reqid)
+                        else:
+
+                            # these are errors like "Order amount is too low"
+                            # or "Order not found" and the like, we send them
+                            # to signal_recv() as if they had come from the
+                            # streaming API beause Gox() can handle these errors.
+                            translated = {
+                                "op": "remark",
+                                "success": False,
+                                "message": answer["error"],
+                                "token": answer["token"],
+                                "id": reqid
+                            }
+
                     else:
                         self.debug("### unexpected http result:", answer, reqid)
 
@@ -1080,11 +1091,15 @@ class BaseClient(BaseObject):
             api = "order/cancel"
             self.send_signed_call(api, params, reqid)
 
+    def on_idkey_received(self, data):
+        """id key was received, subscribe to private channel"""
+        self.send(json.dumps({"op":"mtgox.subscribe", "key":data}))
+
     def slot_timer(self, _sender, _data):
         """check timeout (last received, dead socket?)"""
         if self.connected:
             if time.time() - self._time_last_received > 60:
-                self.debug("did not receive anything for a long time, disconnecting.")
+                self.debug("### did not receive anything for a long time, disconnecting.")
                 self.force_reconnect()
                 self.connected = False
             if time.time() - self._time_last_subscribed > 1800:
@@ -1100,9 +1115,7 @@ class BaseClient(BaseObject):
 
 
 class WebsocketClient(BaseClient):
-    """this implements a connection to MtGox through the older (but faster)
-    websocket protocol. Unfortuntely its just as unreliable as the socket.io."""
-
+    """this implements a connection to MtGox through the websocket protocol."""
     def __init__(self, curr_base, curr_quote, secret, config):
         BaseClient.__init__(self, curr_base, curr_quote, secret, config)
         self.hostname = WEBSOCKET_HOST
@@ -1130,7 +1143,7 @@ class WebsocketClient(BaseClient):
                 else:
                     ws_url = "%s%s?Channel=ticker.%s" % \
                     (wsp, self.hostname, sym)
-                self.debug("trying plain old Websocket: %s ... " % ws_url)
+                self.debug("### trying plain old Websocket: %s ... " % ws_url)
 
                 self.socket = websocket.WebSocket()
                 # The server is somewhat picky when it comes to the exact
@@ -1139,9 +1152,9 @@ class WebsocketClient(BaseClient):
                 self.socket.connect(ws_url, origin=ws_origin, header=ws_headers)
                 self._time_last_received = time.time()
                 self.connected = True
-                self.debug("connected, subscribing needed channels")
+                self.debug("### connected, subscribing needed channels")
                 self.channel_subscribe()
-                self.debug("waiting for data...")
+                self.debug("### waiting for data...")
                 self.signal_connected(self, None)
                 while not self._terminating: #loop1 (read messages)
                     str_json = self.socket.recv()
@@ -1153,7 +1166,7 @@ class WebsocketClient(BaseClient):
                 self.connected = False
                 self.signal_disconnected(self, None)
                 if not self._terminating:
-                    self.debug(exc.__class__.__name__, exc,
+                    self.debug("### ", exc.__class__.__name__, exc,
                         "reconnecting in %i seconds..." % reconnect_time)
                     if self.socket:
                         self.socket.close()
@@ -1229,119 +1242,107 @@ class SocketIO(websocket.WebSocket):
 
 
 class PubnubClient(BaseClient):
-    """this implements the pubnub client.
-
-    THIS IS ALL INCOMPLETE AND ITS A TOTAL MESS
-    BECAUSE I NEEDED TO HACK THIS IN A HURRY.
-
-    THE Pubnub.py MODULE WAS PATCHED BY ME TO
-    MAKE AUTH AND DECRYPTION WORK, DIFF AGAINST
-    ORIGINAL TO SEE WAHT I DID.
-
-    INVOKE THIS CLIENT WITH --protocol=pubnub
-    """
-
+    """"This implements the pubnub client. This client cannot send trade
+    requests over the streamin API, therefore all interaction with MtGox has
+    to happen through http(s) api, this client will enforce this flag to be
+    set automatically."""
     def __init__(self, curr_base, curr_quote, secret, config):
         global FORCE_HTTP_API #pylint: disable=W0603
-        FORCE_HTTP_API = True
         BaseClient.__init__(self, curr_base, curr_quote, secret, config)
+        FORCE_HTTP_API = True
         self._pubnub = None
         self._pubnub_priv = None
+        self._private_thread_started = False
+        self.stream_sorter = PubnubStreamSorter(
+            self.config.get_float("pubnub", "stream_sorter_time_window"))
+        self.stream_sorter.signal_pop.connect(self.signal_recv)
+        self.stream_sorter.signal_debug.connect(self.signal_debug)
+
+    def start(self):
+        BaseClient.start(self)
+        self.stream_sorter.start()
+
+    def stop(self):
+        """stop the client"""
+        self._terminating = True
+        self.stream_sorter.stop()
+        self._timer.cancel()
+        self.force_reconnect()
 
     def force_reconnect(self):
         self.connected = False
         self.signal_disconnected(self, None)
+        # as long as the _terinating flag is not set
+        # a hup() will just make them reconnect,
+        # the same way a network failure would do.
         if self._pubnub_priv:
-            self._pubnub_priv.kill()
+            self._pubnub_priv.hup()
         if self._pubnub:
-            self._pubnub.kill()
+            self._pubnub.hup()
 
     def send(self, _msg):
         # can't send with this client,
-        self.debug("invalid attempt to use send() with Pubnub client")
+        self.debug("### invalid attempt to use send() with Pubnub client")
 
     def _recv_thread_func(self):
-        self.debug("creating pubnub object...")
-        self._pubnub = Pubnub.Pubnub(
-            'demo',
-            'sub-c-50d56e1e-2fd9-11e3-a041-02ee2ddab7fe'
+        self._pubnub = pubnub_light.PubNub()
+        self._pubnub.subscribe(
+            'sub-c-50d56e1e-2fd9-11e3-a041-02ee2ddab7fe',
+            ",".join([
+                CHANNELS['depth.%s%s' % (self.curr_base, self.curr_quote)],
+                CHANNELS['ticker.%s%s' % (self.curr_base, self.curr_quote)],
+                CHANNELS['trade.%s' % self.curr_base],
+                CHANNELS['trade.lag']
+            ]),
+            "",
+            "",
+            self.config.get_bool("gox", "use_ssl")
         )
 
         # the following doesn't actually subscribe to the public channels
         # in this implementation, it only gets acct info and market data
-        # and it also starts a separate thread to receive private messages
+        # and enqueue a request for the pricate channel auth credentials
         self.channel_subscribe(True)
 
-        # Here comes the ugliness. They are using some kind of
-        # long polling, what a waste of resources, this is 1990's
-        # technology (haven't they heard of websockets yet?) Its
-        # waiting in a blocking http request and disonnecting and
-        # reconnecting AFTER EVERY GODDAMN MESSAGE, I have never seen
-        # so many syn and ack packages flying over the network before.
-        # The stupid "subscribe" call is blocking (it really shouldn't
-        # be called subscribe) and running an uninterruptible loop,
-        # doing a new connect and GET request after every message.
-        #
-        # What an enormous crap.
-        #
-        # now prepare the channel list for the public channnels
-        chanlist = ",".join([
-            CHANNELS['depth.%s%s' % (self.curr_base, self.curr_quote)],
-            CHANNELS['ticker.%s%s' % (self.curr_base, self.curr_quote)],
-            CHANNELS['trade.%s' % self.curr_base],
-            CHANNELS['trade.lag']
-        ])
+        self.debug("### starting public channel pubnub client")
+        while not self._terminating:
+            try:
+                while not self._terminating:
+                    messages = self._pubnub.read()
+                    self._time_last_received = time.time()
+                    if not self.connected:
+                        self.connected = True
+                        self.signal_connected(self, None)
+                    for _channel, message in messages:
+                        self.stream_sorter.put(message)
+            except Exception:
+                self.debug("### public channel interrupted")
+                #self.debug(traceback.format_exc())
+                if not self._terminating:
+                    time.sleep(1)
+                    self.debug("### public channel restarting")
 
-        # the following will now be blocking until error occurs
-        self.debug("subscribing public channels")
-        self._pubnub.subscribe({
-           'channel'  : chanlist,
-           'auth'     : "",
-           'callback' : self._pubnub_receive
-        })
-        self.debug("### conection for public channels lost")
-        if not self._terminating:
-            start_thread(self._recv_thread_func)
+        self.debug("### public channel thread terminated")
 
-    def _sub_private_thread(self):
+    def _recv_private_thread_func(self):
         """thread for receiving the private messages"""
-        res = {}
-        while True:
-            self.debug("requesting private channel auth")
-            res = self.http_signed_call("stream/private_get", {})
-            # self.debug(pretty_format(res))
-            if (not res) or (not "data" in res):
-                time.sleep(1)
-            else:
-                break
+        self.debug("### starting private channel pubnub client")
+        while not self._terminating:
+            try:
+                while not self._terminating:
+                    messages = self._pubnub_priv.read()
+                    self._time_last_received = time.time()
+                    for _channel, message in messages:
+                        self.stream_sorter.put(message)
 
-        if self._pubnub_priv:
-            self.debug("killing old private pubnub")
-            self._pubnub_priv.kill
+            except Exception:
+                self.debug("### private channel interrupted")
+                #self.debug(traceback.format_exc())
+                if not self._terminating:
+                    time.sleep(1)
+                    self.debug("### private channel restarting")
 
-        self.debug("init private pubnub")
-        self._pubnub_priv = Pubnub.Pubnub(
-            res["data"]["pub"],
-            res["data"]["sub"],
-            None,
-            res["data"]["cipher"],
-        )
-
-        self.connected = True
-        self.signal_connected(self, None)
-
-        self.debug("subscribe private channel")
-        # blocking
-        res = self._pubnub_priv.subscribe({
-           'channel'  : res["data"]["channel"],
-           'auth'     : res["data"]["auth"],
-           'callback' : self._pubnub_receive
-        })
-        if res == "killed":
-            self.debug("old private channel thread orderly terminated")
-        else:
-            self.debug("private channel thread unexpectedly terminated")
-            self.force_reconnect()
+        self.debug("### private channel thread terminated")
 
     def _pubnub_receive(self, msg):
         """callback method called by pubnub when a message is received"""
@@ -1350,22 +1351,105 @@ class PubnubClient(BaseClient):
         return not self._terminating
 
     def channel_subscribe(self, download_market_data=False):
-        # no channels to subscribe, this happened on connect already
+        # no channels to subscribe, this happened in PubNub.__init__ already
+        if self.secret and self.secret.know_secret():
+            self.enqueue_http_request("stream/private_get", {}, "idkey")
+
         self.request_info()
         self.request_orders()
-        if download_market_data:
-            self.request_fulldepth()
-            self.request_history()
 
-        if self.secret.know_secret():
-            start_thread(self._sub_private_thread, "private channel")
+        if download_market_data:
+            if self.config.get_bool("gox", "load_fulldepth"):
+                if not FORCE_NO_FULLDEPTH:
+                    self.request_fulldepth()
+            if self.config.get_bool("gox", "load_history"):
+                if not FORCE_NO_HISTORY:
+                    self.request_history()
 
         self._time_last_subscribed = time.time()
 
+    def on_idkey_received(self, data):
+        if not self._pubnub_priv:
+            self.debug("### init private pubnub")
+            self._pubnub_priv = pubnub_light.PubNub()
+
+        self._pubnub_priv.subscribe(
+            data["sub"],
+            data["channel"],
+            data["auth"],
+            data["cipher"],
+            self.config.get_bool("gox", "use_ssl")
+        )
+
+        if not self._private_thread_started:
+            start_thread(self._recv_private_thread_func, "private channel thread")
+            self._private_thread_started = True
+
+
+class PubnubStreamSorter(BaseObject):
+    """sort the incoming messages by "stamp" field. This will introduce
+    a delay but its the only way to get these messages into proper order."""
+    def __init__(self, delay):
+        BaseObject.__init__(self)
+        self.delay = delay
+        self.queue = []
+        self.terminating = False
+        self.stat_last = 0
+        self.stat_bad = 0
+        self.stat_good = 0
+        self.signal_pop = Signal()
+        self.lock = threading.Lock()
+
+    def start(self):
+        """start the extraction thread"""
+        start_thread(self._extract_thread_func, "message sorter thread")
+        self.debug("### initialized stream sorter with %g s time window"
+            % (self.delay))
+
+    def put(self, message):
+        """put a message into the queue"""
+        stamp = int(message["stamp"]) / 1000000.0
+
+        # sort it into the existing waiting messages
+        self.lock.acquire()
+        bisect.insort(self.queue, (stamp, time.time(), message))
+        self.lock.release()
+
+    def stop(self):
+        """terminate the sorter thread"""
+        self.terminating = True
+
+    def _extract_thread_func(self):
+        """this thread will permanently pop oldest messages
+        from the queue after they have stayed delay time in
+        it and fire signal_pop for each message."""
+        while not self.terminating:
+            self.lock.acquire()
+            while self.queue \
+            and self.queue[0][1] + self.delay < time.time():
+                (stamp, _received, msg) = self.queue.pop(0)
+                self._update_statistics(stamp, msg)
+                self.signal_pop(self, (msg))
+            self.lock.release()
+            time.sleep(50E-3)
+
+    def _update_statistics(self, stamp, _msg):
+        """collect some statistics and print to log occasionally"""
+        if stamp < self.stat_last:
+            self.stat_bad += 1
+            self.debug("### message late:", self.stat_last - stamp)
+        else:
+            self.stat_good += 1
+        self.stat_last = stamp
+        if self.stat_good % 2000 == 0:
+            if self.stat_good + self.stat_bad > 0:
+                self.debug("### stream sorter: good:%i bad:%i (%g%%)" % \
+                    (self.stat_good, self.stat_bad, \
+                    100.0 * self.stat_bad / (self.stat_bad + self.stat_good)))
+
 
 class SocketIOClient(BaseClient):
-    """this implements a connection to MtGox using the new socketIO protocol.
-    This should replace the older plain websocket API"""
+    """this implements a connection to MtGox using the socketIO protocol."""
 
     def __init__(self, curr_base, curr_quote, secret, config):
         BaseClient.__init__(self, curr_base, curr_quote, secret, config)
@@ -1390,28 +1474,28 @@ class SocketIOClient(BaseClient):
                     querystring = "Channel=depth.%s/ticker.%s" % (sym, sym)
                 else:
                     querystring = "Channel=ticker.%s" % (sym)
-                self.debug("trying Socket.IO: %s?%s ..." % (url, querystring))
+                self.debug("### trying Socket.IO: %s?%s ..." % (url, querystring))
                 self.socket = SocketIO()
                 self.socket.connect(url, query=querystring)
 
                 self._time_last_received = time.time()
                 self.connected = True
-                self.debug("connected")
+                self.debug("### connected")
                 self.socket.send("1::/mtgox")
 
                 self.debug(self.socket.recv())
                 self.debug(self.socket.recv())
 
-                self.debug("subscribing to channels")
+                self.debug("### subscribing to channels")
                 self.channel_subscribe()
 
-                self.debug("waiting for data...")
+                self.debug("### waiting for data...")
                 self.signal_connected(self, None)
                 while not self._terminating: #loop1 (read messages)
                     msg = self.socket.recv()
                     self._time_last_received = time.time()
                     if msg == "2::":
-                        self.debug("### ping -> pong")
+                        #self.debug("### ping -> pong")
                         self.socket.send("2::")
                         continue
                     prefix = msg[:10]
@@ -1424,7 +1508,7 @@ class SocketIOClient(BaseClient):
                 self.connected = False
                 self.signal_disconnected(self, None)
                 if not self._terminating:
-                    self.debug(exc.__class__.__name__, exc, \
+                    self.debug("### ", exc.__class__.__name__, exc, \
                         "reconnecting in 1 seconds...")
                     self.socket.close()
                     time.sleep(1)
@@ -1439,7 +1523,7 @@ class SocketIOClient(BaseClient):
     def slot_keepalive_timer(self, _sender, _data):
         """send a keepalive, just to make sure our socket is not dead"""
         if self.connected:
-            self.debug("sending keepalive")
+            #self.debug("### sending keepalive")
             self._try_send_raw("2::")
 
 
@@ -1554,13 +1638,13 @@ class Gox(BaseObject):
 
     def start(self):
         """connect to MtGox and start receiving events."""
-        self.debug("starting gox streaming API, trading %s%s" %
+        self.debug("### starting gox streaming API, trading %s%s" %
             (self.curr_base, self.curr_quote))
         self.client.start()
 
     def stop(self):
         """shutdown the client"""
-        self.debug("shutdown...")
+        self.debug("### shutdown...")
         self.client.stop()
 
     def order(self, typ, price, volume):
@@ -1632,8 +1716,6 @@ class Gox(BaseObject):
         need_no_history = not self.config.get_bool("gox", "load_history")
         need_no_depth = need_no_depth or FORCE_NO_FULLDEPTH
         need_no_history = need_no_history or FORCE_NO_HISTORY
-        if isinstance(self.client, PubnubClient):
-            self.ready_idkey = True
         ready_account = \
             self.ready_idkey and self.ready_info and self.orderbook.ready_owns
         if ready_account or need_no_account:
@@ -1681,6 +1763,11 @@ class Gox(BaseObject):
         else:
             msg = json.loads(str_json)
         self.msg = msg
+
+        if "stamp" in msg:
+            delay = time.time() * 1e6 - int(msg["stamp"])
+            self.socket_lag = (self.socket_lag * 29 + delay) / 30
+
         if "op" in msg:
             try:
                 msg_op = msg["op"]
@@ -1710,11 +1797,11 @@ class Gox(BaseObject):
 
     def _on_op_error(self, msg):
         """handle error mesages (op:error)"""
-        self.debug("_on_op_error()", msg)
+        self.debug("### _on_op_error()", msg)
 
     def _on_op_subscribe(self, msg):
         """handle subscribe messages (op:subscribe)"""
-        self.debug("subscribed channel", msg["channel"])
+        self.debug("### subscribed channel", msg["channel"])
 
     def _on_op_result(self, msg):
         """handle result of authenticated API call (op:result, id:xxxxxx)"""
@@ -1724,7 +1811,7 @@ class Gox(BaseObject):
         if reqid == "idkey":
             self.debug("### got key, subscribing to account messages")
             self._idkey = result
-            self.client.send(json.dumps({"op":"mtgox.subscribe", "key":result}))
+            self.client.on_idkey_received(result)
             self.ready_idkey = True
             self.check_connect_ready()
 
@@ -1779,7 +1866,7 @@ class Gox(BaseObject):
             self.debug("### got ack for order/cancel:", oid)
 
         else:
-            self.debug("_on_op_result() ignoring:", msg)
+            self.debug("### _on_op_result() ignoring:", msg)
 
     def _on_op_private(self, msg):
         """handle op=private messages, these are the messages of the channels
@@ -1790,7 +1877,7 @@ class Gox(BaseObject):
         try:
             handler = getattr(self, "_on_op_private_" + private)
         except AttributeError:
-            self.debug("_on_op_private() ignoring: private=%s" % private)
+            self.debug("### _on_op_private() ignoring: private=%s" % private)
             self.debug(pretty_format(msg))
 
         if handler:
@@ -1826,7 +1913,6 @@ class Gox(BaseObject):
         total_volume = int(msg["total_volume_int"])
 
         delay = time.time() * 1e6 - timestamp
-        self.socket_lag = (self.socket_lag * 2 + delay) / 3
 
         self.debug("depth: %s: %s @ %s total vol: %s (age: %0.2f s)" % (
             typ,
@@ -1843,7 +1929,7 @@ class Gox(BaseObject):
             return
         if msg["trade"]["item"] != self.curr_base:
             return
-        if msg["channel"] == "dbf1dee9-4f2e-4a08-8cb7-748919a71b21":
+        if msg["channel"] == CHANNELS["trade.%s" % self.curr_base]:
             own = False
         else:
             own = True
@@ -1986,7 +2072,7 @@ class Gox(BaseObject):
             self.client.send_order_cancel(oid)
 
         else:
-            self.debug("_on_invalid_call() ignoring:", msg)
+            self.debug("### _on_invalid_call() ignoring:", msg)
 
     def _on_order_not_found(self, msg):
         """this means we have sent order/cancel with non-existing oid"""
@@ -2001,12 +2087,12 @@ class Gox(BaseObject):
 
     def _on_order_amount_too_low(self, _msg):
         """we received an order_amount too low message."""
-        self.debug("Server said: 'Order amount is too low'")
+        self.debug("### Server said: 'Order amount is too low'")
         self.count_submitted -= 1
 
     def _on_too_many_orders(self, msg):
         """server complains too many orders were placd too fast"""
-        self.debug("Server said: '%s" % msg["message"])
+        self.debug("### Server said: '%s" % msg["message"])
         self.count_submitted -= 1
         self.signal_order_too_fast(self, msg)
 
@@ -2260,9 +2346,6 @@ class OrderBook(BaseObject):
             for order in self.owns:
                 if order.oid == oid:
                     found = True
-                    if order.status == "open" and status == "open":
-                        # ignore duplicated open message
-                        return
                     self.debug(
                         "### updating order %s " % oid,
                         "volume:", self.gox.base2str(volume),
